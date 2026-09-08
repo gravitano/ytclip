@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+out/
+probe/
+tmp_*/
+*.mp4
+*.json3
+words.json
+transcript.txt
