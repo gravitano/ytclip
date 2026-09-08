@@ -33,9 +33,11 @@ isinya dianggap `clips` saja dengan style default.
 | `id` | ya | Dipakai jadi nama file `clip<id>.mp4` |
 | `start`, `end` | ya | Detik pada video sumber, boleh pecahan |
 | `title` | ya | Judul di band atas, `\n` untuk baris kedua |
-| `layout` | — | `split` (default), `single`, atau `fit` |
+| `layout` | — | `split` (default), `track`, `single`, atau `fit` |
 | `top`, `bottom` | untuk `split` | Titik wajah tiap panel |
 | `face` | untuk `single` | Titik wajah |
+| `shots` | untuk `track` | Daftar shot dari `shots.py` |
+| `face_ratio` | untuk `track` | Porsi tinggi layar yang diisi wajah (bawaan 0.45) |
 
 ### Objek wajah
 
@@ -49,6 +51,11 @@ isinya dianggap `clips` saja dengan style default.
 
 ### `split` — dua orang, kamera statis
 
+**Syaratnya kamera terkunci satu angle.** Pada sumber multicam layout ini gagal
+total: jangkar dihitung sekali untuk seluruh klip, jadi begitu kamera berganti ke
+close-up, panel yang satunya menunjuk ruang kosong. Periksa potongan lebih dulu —
+jumlah jangkar saja tidak cukup, karena multicam pun bisa menghasilkan tepat dua.
+
 Dua panel ditumpuk, masing-masing 1080 x `(1920 - head_h) / 2`. Ini pilihan yang
 benar untuk podcast two-shot: center crop biasa akan memotong kedua orang sekaligus,
 sementara memilih salah satu berarti membuang lawan bicaranya.
@@ -56,6 +63,36 @@ sementara memilih salah satu berarti membuang lawan bicaranya.
 Kedua orang selalu terlihat, jadi tidak perlu diarisasi pembicara. Panel atas
 sebaiknya diisi host (yang lebih sering menyela), panel bawah narasumber — subtitle
 jatuh di panel bawah, dekat orang yang paling banyak bicara.
+
+### `track` — sumber multicam
+
+Satu bingkai tegak yang berpindah mengikuti wajah, **berganti tepat di potongan
+yang sudah ada di sumber**. Ini layout untuk video yang kameranya berpindah —
+wawancara multicam, apa pun dengan lebih dari ~1 potongan per menit.
+
+Kunci kenyamanannya ada pada penjadwalan: perpindahan bingkai dijatuhkan persis di
+titik sumber sudah memotong. Di situ gambarnya memang berganti total, jadi lompatan
+bingkai tidak terbaca sebagai kesalahan. Memindahkan bingkai di tengah shot —
+entah digeser halus atau dipotong — selalu terbaca sebagai glitch, karena kameranya
+sendiri tidak bergerak.
+
+**Tiap shot mendapat ukuran crop sendiri**, dihitung dari tinggi wajah yang
+terdeteksi, supaya wajah menempati porsi layar yang sama di semua shot:
+
+```
+ch = fh / face_ratio        fh = tinggi wajah di shot itu, face_ratio ~0.45
+cw = ch * 1080 / 1920
+```
+
+Tanpa normalisasi ini, potongan ke wide shot terbaca sebagai zoom-out mendadak.
+Diukur pada satu podcast ultrawide 3840x1600: wajah mengisi 43-49% tinggi layar di
+close-up tetapi hanya 25-27% di wide shot — hampir dua kali lipat selisihnya.
+
+Karena ukuran crop berbeda per shot, filter `crop` tidak bisa dipakai sendirian:
+lebar dan tinggi crop hanya dievaluasi sekali saat filter dikonfigurasi, cuma `x`
+dan `y` yang bisa berubah per frame. Jadi tiap shot di-`trim` jadi cabang sendiri,
+di-crop dengan geometrinya sendiri, lalu disambung dengan filter `concat` — tetap
+satu pass encoding.
 
 ### `single` — satu pembicara
 
@@ -111,6 +148,9 @@ stroke hitam tebal plus bayangan supaya terbaca di atas latar terang mana pun.
 | Subtitle menutupi mulut | Wajah terlalu rendah di panel | Kecilkan `headroom`, atau naikkan `cap_y` |
 | Judul terpotong di tepi | Baris terlalu panjang | ≤30 karakter per baris, atau kecilkan `title_size` |
 | Klip kena segmen slide | Video berpindah shot | Sampel frame di tengah klip, ganti ke layout `fit` |
+| Bingkai meleset ke dinding kosong | `split` dipakai pada sumber multicam | Deteksi potongan dulu; pakai `track` |
+| Klip seperti zoom-out saat potongan | `fh` tidak terisi di `shots` | Jalankan ulang `shots.py`, pastikan `fh` ada |
+| Wajah salah dibingkai di wide shot | `shots.py` memilih wajah terbesar | Setel `cx`/`cy` shot itu manual di `clips.json` |
 
 ## Kalau tidak ada auto-caption
 

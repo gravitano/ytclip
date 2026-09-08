@@ -127,6 +127,19 @@ class Caption:
         return img
 
 
+def _switch_expr(shots, values):
+    """Ekspresi ffmpeg yang berganti nilai tepat di batas shot.
+
+    Perpindahan crop SENGAJA dijatuhkan pada potongan yang sudah ada di
+    sumber. Di titik itu gambarnya memang berganti total, jadi lompatan
+    bingkai tidak terlihat sebagai kesalahan — berbeda dengan memindahkan
+    bingkai di tengah shot, yang selalu terbaca sebagai glitch."""
+    expr = str(values[-1])
+    for i in range(len(shots) - 2, -1, -1):
+        expr = f"if(lt(t,{shots[i]['t1']:.3f}),{values[i]},{expr})"
+    return expr
+
+
 def crop_for(face, src_w, src_h, pw, ph):
     """Crop beraspek panel, di-zoom, dipusatkan ke wajah, lalu dijepit ke tepi frame.
     Penjepitan inilah yang memberi lookroom otomatis: orang di kiri frame akan
@@ -153,6 +166,34 @@ def filtergraph(clip, st, src_w, src_h):
         base = (f"[0:v]{top}[top];[0:v]{bot}[bot];"
                 f"color=c={st['bg']}:s={CANVAS_W}x{CANVAS_H}:d=1[bg];"
                 f"[bg][top]overlay=0:{head}[a];[a][bot]overlay=0:{head + ph}[b];")
+    elif lay == "track":
+        # Satu bingkai tegak yang berpindah mengikuti wajah, berganti tepat
+        # di potongan sumber. Untuk sumber multicam, di mana bingkai tetap
+        # akan meleset begitu kamera berganti.
+        #
+        # Tiap shot dapat ukuran crop SENDIRI, dihitung dari tinggi wajah,
+        # supaya wajah menempati porsi layar yang sama di semua shot. Tanpa
+        # ini, potongan ke wide shot terbaca sebagai zoom-out mendadak:
+        # pada sumber ultrawide, wajah di wide shot bisa cuma separuh
+        # ukurannya di close-up.
+        shots = clip["shots"]
+        target = clip.get("face_ratio", 0.45)
+        hr = clip.get("headroom", 0.42)
+        parts, labels = [], []
+        for i, sh in enumerate(shots):
+            fh = sh.get("fh") or 0
+            ch = int(src_h / clip.get("zoom", 1.0)) if not fh else int(fh / target)
+            ch = max(240, min(src_h, ch)) // 2 * 2
+            cw = max(120, min(src_w, int(ch * CANVAS_W / CANVAS_H))) // 2 * 2
+            x = max(0, min(int(sh["cx"] - cw / 2), src_w - cw))
+            y = max(0, min(int(sh["cy"] - ch * hr), src_h - ch))
+            t1 = min(sh["t1"], clip["end"] - clip["start"])
+            parts.append(
+                f"[0:v]trim=start={sh['t0']:.3f}:end={t1:.3f},setpts=PTS-STARTPTS,"
+                f"crop={cw}:{ch}:{x}:{y},scale={CANVAS_W}:{CANVAS_H},setsar=1[s{i}];")
+            labels.append(f"[s{i}]")
+        base = ("".join(parts) +
+                "".join(labels) + f"concat=n={len(shots)}:v=1:a=0[b];")
     elif lay == "single":
         one = crop_for(clip["face"], src_w, src_h, CANVAS_W, CANVAS_H)
         base = f"[0:v]{one}[b];"

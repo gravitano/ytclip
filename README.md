@@ -32,7 +32,8 @@ cukup tempel URL YouTube dan minta klip pendek.
 | `SKILL.md` | Alur kerja dan kriteria pemilihan momen |
 | `scripts/fetch.py` | Unduh video + transkrip word-level dari auto-caption `json3` |
 | `scripts/probe.py` | Inspeksi timing kata dan framing video |
-| `scripts/render.py` | Render klip; layout `split`, `single`, `fit` |
+| `scripts/shots.py` | Petakan potongan shot + posisi/ukuran wajah per shot |
+| `scripts/render.py` | Render klip; layout `split`, `track`, `single`, `fit` |
 | `reference/layouts.md` | Skema `clips.json`, matematika crop, troubleshooting |
 | `docs/cara-kerja.md` | Studi kasus: bagaimana enam klip pertama dibuat, dan kenapa keputusannya begitu |
 
@@ -60,6 +61,10 @@ tidak tersedia. Pendekatan PNG jalan di build ffmpeg mana pun.
 menghasilkan koordinat crop negatif yang dijepit ke nol, sehingga ia menempel ke
 kiri panel dan ruang kosongnya jatuh searah pandangannya ke lawan bicara. Lookroom
 muncul sendiri tanpa bias manual.
+
+**Perpindahan bingkai dijatuhkan di potongan sumber.** Layout `track` mengganti
+bingkai persis saat sumber sudah memotong, jadi lompatannya tak terlihat — dan tiap
+shot dapat ukuran crop sendiri supaya wajah tetap seukuran di semua shot.
 
 **Pemilihan momen sengaja tidak diotomatiskan.** Di situlah kualitas hasil
 ditentukan, dan itu butuh membaca transkrip — bukan menghitung skor.

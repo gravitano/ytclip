@@ -81,26 +81,57 @@ uv run ~/.claude/skills/ytclip/scripts/probe.py "$W" words 555 625
 Mulai tepat di kata pertama hook (jangan sertakan "ee", "jadi", "nah" di depan),
 akhiri sesudah kata terakhir penutup + ~0.3 detik.
 
-### 4. Ukur framing
+### 4. Pilih layout dan ukur framing
 
 ```bash
-uv run ~/.claude/skills/ytclip/scripts/probe.py "$W" grid 700     # frame + grid 10%
 uv run ~/.claude/skills/ytclip/scripts/probe.py "$W" frames 120 400 700 1000
+uv run ~/.claude/skills/ytclip/scripts/probe.py "$W" grid 700     # frame + grid 10%
 ```
 
-Baca gambarnya dengan tool Read, lalu tentukan:
+Baca gambarnya dengan tool Read, lalu **periksa dulu apakah sumbernya multicam**
+— ini penentu pertama, bukan penentu terakhir:
 
-- **Pilih layout.** `split` untuk two-shot statis dua orang (paling umum untuk
-  podcast — center crop biasa akan memotong kedua orang). `single` untuk satu
-  pembicara. `fit` untuk segmen screenshare/slide, di mana isi frame tidak boleh dipotong.
-- **Ukur titik tengah wajah** dalam piksel sumber dari frame ber-grid (tiap kotak = 10%).
-  Untuk 1920x1080, kotak = 192x108 px.
-- **Cek tiap klip berada di segmen yang sesuai layoutnya** — sampel frame di
-  tengah tiap klip. Video sering berpindah antara talking head dan slide.
+```bash
+ffmpeg -v error -ss 600 -t 300 -i "$W/source.mp4" \
+  -vf "scale=320:-1,select='gt(scene,0.3)',metadata=print:file=-" -an -f null - \
+  2>/dev/null | grep -c pts_time
+```
 
-Crop dihitung otomatis: beraspek panel, dipusatkan ke wajah, lalu dijepit ke tepi
-frame. Penjepitan itu yang memberi lookroom — orang di kiri frame menempel ke kiri
-panel sehingga ruang pandangnya jatuh ke kanan, sesuai arah ia menghadap.
+Lebih dari ~1 potongan per menit berarti multicam. Jangan pernah memakai `split`
+di situ: bingkai tetap akan menunjuk ruang kosong begitu kamera berganti, dan
+separuh layar jadi dinding kosong.
+
+Tangga keputusannya:
+
+| Kondisi | Layout |
+|---|---|
+| Ada perpindahan shot di dalam klip | `track` |
+| Kamera terkunci, 2 orang, terpisah lebar, selalu terlihat | `split` |
+| Kamera terkunci, 1 orang | `single` |
+| Slide, screenshare, atau isi frame yang tidak boleh dipotong | `fit` |
+
+**Jangan menyaring `split` hanya lewat jumlah jangkar wajah.** Sumber multicam bisa
+tetap menghasilkan tepat dua kelompok wajah yang meyakinkan — satu dari close-up,
+satu dari wide shot — padahal keduanya berasal dari kamera yang berbeda. Deteksi
+potongan adalah penjaganya; jumlah wajah per sampel yang stabil (mendekati 100%,
+bukan sekadar "mayoritas") adalah penjaga keduanya.
+
+Untuk `split` dan `single`, ukur titik tengah wajah dari frame ber-grid (tiap kotak
+10%; pada 1920x1080 berarti 192x108 px).
+
+Untuk `track`, pemetaannya otomatis:
+
+```bash
+uv run --with opencv-python-headless ~/.claude/skills/ytclip/scripts/shots.py \
+  "$W/source.mp4" "$W/yunet.onnx" 596.1 648.5
+```
+
+Model YuNet diunduh sekali dari `opencv_zoo` (`face_detection_yunet_2023mar.onnx`).
+Pada sumber besar, jalankan `shots.py` pada salinan resolusi rendah lalu skalakan
+`cx`/`cy`/`fh` — posisi wajahnya sama dan jauh lebih cepat.
+
+Terakhir, sampel frame di tengah tiap klip untuk memastikan layoutnya cocok dengan
+segmen itu. Video sering berpindah antara talking head dan slide.
 
 ### 5. Tulis `clips.json`
 
