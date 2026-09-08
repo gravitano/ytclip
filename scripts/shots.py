@@ -42,9 +42,36 @@ W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)); H = int(cap.get(cv2.CAP_PROP_FRAME_H
 det = cv2.FaceDetectorYN.create(model, "", (W, H), 0.6, 0.3, 5000)
 det.setInputSize((W, H))
 
+def _dominant(samples, frame_w):
+    """Pilih SATU orang dari kumpulan wajah lintas sampel.
+
+    Mediannya tidak boleh diambil langsung dari semua wajah: pada wide shot
+    dua orang, sebagian sampel memilih yang kiri dan sebagian yang kanan,
+    dan median dari sebaran bimodal itu mendarat di celah KOSONG di antara
+    keduanya — bingkai berisi dinding, bukan orang.
+
+    Maka wajah dikelompokkan dulu berdasarkan posisi x, lalu diambil
+    kelompok yang paling sering muncul; bila seri, yang wajahnya paling
+    besar (paling dekat kamera).
+    """
+    if not samples:
+        return None
+    gap = frame_w * 0.08
+    groups = []
+    for cx, cy, fh in sorted(samples):
+        if groups and cx - groups[-1][-1][0] <= gap:
+            groups[-1].append((cx, cy, fh))
+        else:
+            groups.append([(cx, cy, fh)])
+    best = max(groups, key=lambda g: (len(g), statistics.mean(f[2] for f in g)))
+    return (statistics.median([f[0] for f in best]),
+            statistics.median([f[1] for f in best]),
+            statistics.median([f[2] for f in best]),
+            len(groups))
+
 result = []
 for t0, t1 in segs:
-    xs, ys, hs, counts = [], [], [], []
+    seen, counts = [], []
     for k in range(SAMPLES_PER_SHOT):
         # hindari tepi shot — frame transisi sering kotor
         t = t0 + (t1 - t0) * (k + 0.5) / SAMPLES_PER_SHOT
@@ -56,18 +83,17 @@ for t0, t1 in segs:
         if faces is None:
             counts.append(0); continue
         counts.append(len(faces))
-        # wajah terbesar — pada close-up itu subjeknya, pada wide shot
-        # yang paling dekat kamera
-        f = max(faces, key=lambda r: r[2] * r[3])
-        xs.append(float(f[0] + f[2] / 2)); ys.append(float(f[1] + f[3] / 2))
-        hs.append(float(f[3]))
+        for f in faces:
+            seen.append((float(f[0] + f[2] / 2), float(f[1] + f[3] / 2), float(f[3])))
+    pick = _dominant(seen, W)
+    n = len(counts) or 1
     result.append({
         "t0": round(t0, 2), "t1": round(t1, 2),
-        "cx": round(statistics.median(xs)) if xs else W // 2,
-        "cy": round(statistics.median(ys)) if ys else H // 2,
-        "fh": round(statistics.median(hs)) if hs else 0,
+        "cx": round(pick[0]) if pick else W // 2,
+        "cy": round(pick[1]) if pick else H // 2,
+        "fh": round(pick[2]) if pick else 0,
+        "orang": pick[3] if pick else 0,
         "faces": round(statistics.mean(counts), 1) if counts else 0,
-        "detected": len(xs),
     })
 cap.release()
 print(json.dumps({"source": [W, H], "shots": result}, indent=1))
