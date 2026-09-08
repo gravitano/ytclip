@@ -34,6 +34,7 @@ cukup tempel URL YouTube dan minta klip pendek.
 | `scripts/probe.py` | Inspeksi timing kata dan framing video |
 | `scripts/render.py` | Render klip; layout `split`, `single`, `fit` |
 | `reference/layouts.md` | Skema `clips.json`, matematika crop, troubleshooting |
+| `docs/cara-kerja.md` | Studi kasus: bagaimana enam klip pertama dibuat, dan kenapa keputusannya begitu |
 
 ## Penggunaan langsung
 
